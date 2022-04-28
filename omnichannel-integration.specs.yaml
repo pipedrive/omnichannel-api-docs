@@ -1,0 +1,658 @@
+openapi: 3.0.3
+info:
+  version: 1.0.0
+  title: Channels API - Required endpoints in the vendor's integration
+  description: |
+    Describes the endpoints that should be available in your integration.
+    ## Manifest description of the endpoints
+    Notice that these endpoints need to be added to the manifest file in your app's configuration page in Marketplace Manager, so the API becomes aware of the URLs it needs to call. See an example of the manifest bellow:
+     ```json
+      {
+        "version": "v202101",
+        "endpoints": {
+          "getConversations": "https://your-app.com/api/channels/:providerChannelId/conversations",
+          "getConversationById": "https://your-app.com/apic/channels/:providerChannelId/conversations/:sourceConversationId",
+          "postMessage": "https://your-app.com/api/channels/:providerChannelId/messages",
+          "getMessageById": "https://your-app.com/api/channels/{providerChannelId}/conversations/:sourceConversationId/messages/{sourceMessageId}",
+          "getSenderById": "https://your-app.com/api/channels/:providerChannelId/senders/:senderId",
+          "getTemplates": "https://your-app.com/api/channels/:providerChannelId/templates",
+          "deleteChannelById": "https://your-app.com/api/channels/:providerChannelId"
+        }
+      }
+      ```
+      *getTemplates endpoint is optional (needed only if `template_support` is enabled)
+
+      *getMessageById endpoint is optional (needed only if `link_expires` is enabled)
+
+      *deleteChannelById endpoint is optional (needed if multiple channels per user is supported. Eg.: Facebook pages)
+
+      *getSenderById endpoint is optional (needed if avatar_expires or fetch_avatar is true)
+
+      Notice that the endpoint descriptions have a key (eg.: getConversations) and a value, which is the endpoint URL that corresponds to that key. The URL can be anything that matches the endpoint in your app, you just need to keep the variables somewhere.
+
+      ## Required variables in each URL in the manifest file
+      | URL key                   | Variables                                 |
+      |---------------------------|-------------------------------------------|
+      | **getConversations**      | :providerChannelId                        |
+      | **getConversationById**   | :providerChannelId, :sourceConversationId |
+      | **postMessage**           | :providerChannelId                        |
+      | **getMessageById**      | :providerChannelId, :sourceConversationId, :sourceMessageId      |
+      | **getSenderById**         | :providerChannelId, :senderId             |
+      | **getTemplates**          | :providerChannelId                        |
+      | **deleteChannelById**     | :providerChannelId                        |
+
+      ## What each variable means
+      | Variable                   | Description                               |
+      |----------------------------|-------------------------------------------|
+      | **:providerChannelId**     | The channel ID                            |
+      | **:sourceConversationId**  | The conversation ID                       |
+      | **:senderId**              | The ID of a conversation participant      |
+      | **:sourceMessageId**       | The ID of a message                       |
+
+servers:
+  - url: '{protocol}://{yourAppDomain}{yourApiPrefix}'
+    variables:
+      yourAppDomain:
+        default: your-app.com
+        description: The domain used by your app to expose public endpoints
+      yourApiPrefix:
+        default: /api
+        description: The api prefix of your app
+      protocol:
+        enum: [http, https]
+        default: https
+security:
+  - Authorization: []
+paths:
+  /channels/{providerChannelId}:
+    delete:
+      tags:
+        - Channels
+      summary: Deletes a channel
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        description: The error description
+                      code:
+                        type: string
+                        enum: [UNAUTHORIZED, ACCOUNT_SUSPENDED]
+                        description: An error code expected by the API. If the error is issued due to a suspended account, please send the code ACCOUNT_SUSPENDED
+  /channels/{providerChannelId}/conversations:
+    get:
+      tags:
+        - Conversations
+      summary: Get all conversations from a channel
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+        - in: query
+          name: conversations_limit
+          schema:
+            type: integer
+            default: 30
+          description: The maximum number of conversations expected in the response. It's recommended to use this default value and support pagination, for better performance
+        - in: query
+          name: messages_limit
+          schema:
+            type: integer
+            default: 30
+          description: The maximum number of messages expected for each conversation in the response. It's recommended to use this default value and support pagination, for better performance
+        - in: query
+          name: after
+          schema:
+            type: string
+          description: The pointer used to fetch more conversations
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/conversation"
+                  additional_data:
+                    type: object
+                    properties:
+                      after:
+                        type: string
+                        description: A reference cursor used by the provider, it points to the last conversation loaded, for pagination
+        '401':
+          $ref: "#/components/responses/401_Unauthorized"
+        '403':
+          $ref: "#/components/responses/403_Forbidden"
+        '404':
+          $ref: "#/components/responses/404_NotFound"
+        '429':
+          $ref: "#/components/responses/429_RateLimitExceeded"
+
+  /channels/{providerChannelId}/conversations/{sourceConversationId}:
+    get:
+      tags:
+        - Conversations
+      summary: Get a single conversation and it's messages
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+        - in: path
+          name: sourceConversationId
+          schema:
+            type: string
+          required: true
+          description: The ID of the conversation
+        - in: query
+          name: after
+          schema:
+            type: string
+          description: The cursor used for fetching more messages from the provider
+        - in: query
+          name: messages_limit
+          schema:
+            type: integer
+            default: 30
+          description: The maximum number of messages expected for each conversation in the response. It's recommended to use this default value and support pagination, for better performance
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/conversation"
+                  additional_data:
+                   type: object
+                   properties:
+                     after:
+                       type: string
+                       description: A reference cursor used by the provider, it points to the last conversation loaded, for pagination
+        '401':
+          $ref: "#/components/responses/401_Unauthorized"
+        '403':
+          $ref: "#/components/responses/403_Forbidden"
+        '404':
+          $ref: "#/components/responses/404_NotFound"
+        '429':
+          $ref: "#/components/responses/429_RateLimitExceeded"
+
+  /channels/{providerChannelId}/messages:
+    post:
+      tags:
+        - Messages
+      summary: Add a message
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: The text message to be sent
+                senderId:
+                  type: string
+                  description: A unique ID representing the participant who sent the message
+                conversationId:
+                  type: string
+                  description: The ID of the conversation
+                recipientIds:
+                  type: array
+                  items:
+                    type: string
+                    description: The ID of the recipient
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                    description: The files sent attached in the message
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    required: [id]
+                    properties:
+                      id:
+                        type: string
+                        description: The ID of the created message
+
+        '400':
+          $ref: "#/components/responses/400_BadRequest"
+        '401':
+          $ref: "#/components/responses/401_Unauthorized"
+        '403':
+          $ref: "#/components/responses/403_Forbidden"
+        '404':
+          $ref: "#/components/responses/404_NotFound"
+        '429':
+          $ref: "#/components/responses/429_RateLimitExceeded"
+
+  /channels/{providerChannelId}/messages/{sourceMessageId}:
+    get:
+      tags:
+        - Messages
+      summary: Get the the details of a message
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+        - in: path
+          name: sourceMessageId
+          schema:
+            type: string
+          required: true
+          description: The ID of the message
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/message"
+        '401':
+          $ref: "#/components/responses/401_Unauthorized"
+        '403':
+          $ref: "#/components/responses/403_Forbidden"
+        '404':
+          $ref: "#/components/responses/404_NotFound"
+        '429':
+          $ref: "#/components/responses/429_RateLimitExceeded"
+
+  /channels/{providerChannelId}/senders/{senderId}:
+    get:
+      tags:
+        - Senders
+      summary: Get the information about a message sender
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+        - in: path
+          name: senderId
+          schema:
+            type: string
+          required: true
+          description: The ID of the sender
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    required: [id, name, avatar_url]
+                    properties:
+                      id:
+                        type: string
+                        description: The ID of the sender
+                      name:
+                        type: string
+                        description: The name of the sender
+                      avatar_url:
+                        type: string
+                        description: An URL to the sender's avatar picture
+        '401':
+          $ref: "#/components/responses/401_Unauthorized"
+        '403':
+          $ref: "#/components/responses/403_Forbidden"
+        '404':
+          $ref: "#/components/responses/404_NotFound"
+        '429':
+          $ref: "#/components/responses/429_RateLimitExceeded"
+
+  /channels/{providerChannelId}/templates:
+    get:
+      tags:
+        - Templates
+      summary: Returns a list of templates approved by WhatsApp
+      parameters:
+        - in: path
+          name: providerChannelId
+          schema:
+            type: string
+          required: true
+          description: The ID of the channel
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      templates:
+                        type: array
+                        description: A list of templates
+                        items:
+                          type: object
+                          required: [id, name, content, language]
+                          properties:
+                            id:
+                              type: string
+                              description: A unique ID for the template
+                            name:
+                              type: string
+                              description: The template's name
+                            content:
+                              type: string
+                              description: The content of the template
+                            language:
+                              type: string
+        '401':
+          $ref: "#/components/responses/401_Unauthorized"
+        '403':
+          $ref: "#/components/responses/403_Forbidden"
+        '429':
+          $ref: "#/components/responses/429_RateLimitExceeded"
+components:
+  securitySchemes:
+    Authorization:
+      description:
+        We send in the authorization your app's Client ID in Pipedrive as the username, and it's secret as the password
+      type: http
+      scheme: basic
+  responses:
+
+    400_BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              data:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: The error description
+                  code:
+                    type: string
+                    example: BAD_REQUEST
+                    description: An error code expected by the API
+
+    401_Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              data:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: The error description
+                  code:
+                    type: string
+                    enum: [UNAUTHORIZED, ACCOUNT_SUSPENDED]
+                    description: An error code expected by the API. If the error is issued due to a suspended account, please send the code ACCOUNT_SUSPENDED
+
+    403_Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              data:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: The error description
+                  code:
+                    type: string
+                    example: FORBIDDEN
+                    description: An error code expected by the API
+
+    404_NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              data:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: A message describing which object was not found
+                  code:
+                    type: string
+                    example: 'NOT_FOUND'
+                    description: An error code expected by the API
+
+    429_RateLimitExceeded:
+      description: Rate Limit Exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              data:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: The error description
+                  code:
+                    type: string
+                    example: 'RATE_LIMIT_EXCEEDED'
+                    description: An error code sent by the API
+                  retry_by:
+                    type: string
+                    format: date-time
+                    description: The date in UTC format, that tells when the user could try to execute the operation again
+  schemas:
+    message:
+      type: object
+      required: [id, status, created_at, message, sender_id]
+      properties:
+        id:
+          type: string
+          description: The ID of the message
+        status:
+          type: string
+          enum: [sent, delivered, read, failed]
+          description: The status of the message
+        created_at:
+          type: string
+          format: date-time
+          description:
+            'The date and time when the message was created in the provider, in UTC. Format: YYYY-MM-DD HH:MM'
+        message:
+          type: string
+          description: The body of the message
+        sender_id:
+          type: string
+          description: The ID of the provider's user that sent the message
+        reply_by:
+          type: string
+          format: date-time
+          description:
+            'The date and time when the message can no longer receive a reply, in UTC. Format: YYYY-MM-DD HH:MM'
+        attachments:
+          type: array
+          items:
+            type: object
+            required: [id, type, url]
+            properties:
+              id:
+                type: string
+                description: The ID of the attachment
+              type:
+                type: string
+                description: The mime-type of the attachment
+              name:
+                type: string
+                description: The name of the attachment
+              size:
+                type: number
+                description: The size of the attachment
+              url:
+                type: string
+                description: A URL to the file
+              link_expires:
+                type: boolean
+                default: false
+                description: Indicates if the attachment URL may expire. If true then *getMessageById* route will be used for fetching new a message with fresh attachment
+              preview_url:
+                type: string
+                description: A URL to a preview picture of the file
+    conversation:
+      type: object
+      required: [id, link, status, seen]
+      description: An object representing a conversation
+      properties:
+        id:
+          type: string
+          description: A unique identifier that represents the conversation
+        link:
+          type: string
+          format: url
+          description: An external link to the conversation outside of Pipedrive. Leave it as an empty string if the provider does not have an external chat window that supports external links
+        status:
+          type: string
+          enum: [open, closed]
+          description: A string that indicates the status of the conversation
+        seen:
+          type: boolean
+          description: A flag that indicates if the conversation has been seen by the end user
+        next_messages_cursor:
+          type: string
+          description: A reference used by the next paginated request to fetch more messages. Leave empty if there are no more messages to fetch
+        messages:
+          type: array
+          description: The ID of the user's company in Pipedrive
+          items:
+            $ref: "#/components/schemas/message"
+        participants:
+          type: array
+          items:
+            type: object
+            required: [id, name, role]
+            description: An object that represents the participant. Exactly one `source_user` and at least one `end_user` participants are required for every conversation
+            properties:
+              id:
+                type: string
+                description: The ID of the participant
+              name:
+                type: string
+                description: The name of the participant
+              role:
+                type: string
+                enum: [end_user, source_user]
+                description: Use `source_user` to identify the integration user, and `end_user` to identify the external participant
+              avatar_url:
+                type: string
+                format: url
+                description: An URL to the participant's avatar picture
+              fetch_avatar:
+                type: boolean
+                description: If true and avatar_url is empty it tries to fetch an avatar from the provider endpoint *getSenderById*
+                default: false
+              avatar_expires:
+                type: boolean
+                description: If true then *getSenderById* route will be used for fetching new sender with an updated avatar (only once per day)
+                default: false
+
