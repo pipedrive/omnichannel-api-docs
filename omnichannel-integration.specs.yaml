@@ -20,13 +20,13 @@ info:
         }
       }
       ```
-      *getTemplates endpoint is optional (needed only if `template_support` is enabled)
+      ***getTemplates** endpoint is optional (needed only if `template_support` is enabled)
 
-      *getMessageById endpoint is optional (needed only if `link_expires` is enabled)
+      ***getMessageById** endpoint is optional (needed only if `link_expires` is enabled)
 
-      *deleteChannelById endpoint is optional (needed if multiple channels per user is supported. Eg.: Facebook pages)
+      ***deleteChannelById** endpoint is optional (needed if multiple channels per user is supported. Eg.: Facebook pages)
 
-      *getSenderById endpoint is optional (needed if avatar_expires or fetch_avatar is true)
+      ***getSenderById** endpoint is optional (needed if `avatar_expires` or `fetch_avatar` is true)
 
       Notice that the endpoint descriptions have a key (eg.: getConversations) and a value, which is the endpoint URL that corresponds to that key. The URL can be anything that matches the endpoint in your app, you just need to keep the variables somewhere.
 
@@ -68,7 +68,10 @@ paths:
     delete:
       tags:
         - Channels
-      summary: Deletes a channel
+      summary: Deletes a channel (deleteChannelById)
+      description: >
+        In case your app can insert more than one channel for the user, the user is able to delete them one by one.
+      operationId: deleteChannelById
       parameters:
         - in: path
           name: providerChannelId
@@ -111,7 +114,11 @@ paths:
     get:
       tags:
         - Conversations
-      summary: Get all conversations from a channel
+      summary: Get all conversations from a channel (getConversations)
+      description: >
+       Endpoint is used to sync an initial batch of conversations and their messages and participant. 
+       It is called right after a channel is registered in the Channels API using the `POST /channels` endpoint in the Pipedrive API.
+      operationId: getConversations
       parameters:
         - in: path
           name: providerChannelId
@@ -170,7 +177,11 @@ paths:
     get:
       tags:
         - Conversations
-      summary: Get a single conversation and it's messages
+      summary: Get a single conversation and it's messages (getConversationById)
+      description: >
+        This endpoint is used to fetch a specific conversation and its messages.
+        It is called when an incoming message is part of a new conversation or when paginating over messages.
+      operationId: getConversationById
       parameters:
         - in: path
           name: providerChannelId
@@ -227,7 +238,13 @@ paths:
     post:
       tags:
         - Messages
-      summary: Add a message
+      summary: Add a message (postMessage)
+      description: >
+        This endpoint is used to send a new message to a conversation.
+        It’s called when a user types a message in the chat window and sends it.  
+
+        Unlike the other endpoints, requests for this one will be sent as `multipart/form-data`, since messages may include file attachments.
+      operationId: postMessage
       parameters:
         - in: path
           name: providerChannelId
@@ -251,16 +268,11 @@ paths:
                   type: string
                   description: The ID of the conversation
                 recipientIds:
-                  type: array
-                  items:
-                    type: string
-                    description: The ID of the recipient
+                  type: string
+                  description: Ids of all recipients for a message, split by ",". Eg. josef123456,Eva879542
                 files:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                    description: The files sent attached in the message
+                  type: string
+                  description: Binary of the files sent attached in the message
       responses:
         '200':
           description: Success
@@ -295,7 +307,11 @@ paths:
     get:
       tags:
         - Messages
-      summary: Get the the details of a message
+      summary: Get the details of a message (getMessageById)
+      description: >
+        When an attachment was received with the option `link_expires: true`, Pipedrive will test the attachment links provided, by sending a HEAD request.
+        In the case that the link is no longer accessible, Pipedrive will make a request to this endpoint to receive an updated message with attachments.
+      operationId: getMessageById
       parameters:
         - in: path
           name: providerChannelId
@@ -329,7 +345,10 @@ paths:
     get:
       tags:
         - Senders
-      summary: Get the information about a message sender
+      summary: Get the information about a message sender (getSenderById)
+      description: >
+        This endpoint is called occasionally (max once per day) to refresh the sender's avatar if `avatar_expires` is `true` and also when there is no avatar for the sender but `fetch_avatar` is set to `true` during the sender creation (only once when installing the app).
+      operationId: getSenderById
       parameters:
         - in: path
           name: providerChannelId
@@ -380,7 +399,11 @@ paths:
     get:
       tags:
         - Templates
-      summary: Returns a list of templates approved by WhatsApp
+      summary: Returns a list of templates (getTemplates)
+      description: >
+        This endpoint is used to fetch a list of templates, when the channel was registered with `template_support: true` option. 
+        Right now, only approved WhatsApp templates are supported.
+      operationId: getTemplates
       parameters:
         - in: path
           name: providerChannelId
